@@ -1,35 +1,30 @@
 import express from 'express';
 import axios from 'axios';
-import { CozeAPI, COZE_CN_BASE_URL, ChatEventType,ChatStatus, RoleType } from '@coze/api';
+import { CozeAPI, COZE_CN_BASE_URL, ChatEventType, ChatStatus, RoleType } from '@coze/api';
 import cors from 'cors';
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
- //const API_KEY = "pat_k0vWWCKQTgIANYGL7JKWjsdgeKt6ocOsJjcie7d8LF7jb0oeOt0eIi42npaKepcE";
- //const COZE_API_URL = "https://api.coze.cn/v3/chat";
-
 const cozeClient = new CozeAPI({
-  token: "pat_kStXyB189qqhDKxfD89fxIA0SFJzqoUQ8C2m55WzCGsna1NiUJc7YO8zPRvw308R",
-  // 默认基于 "https://api.coze.cn"
-  // 如果需要，在此指定 allowPersonalAccessTokenInBrowser、baseURL 等
+  token: "pat_98jao9oY1DhFZKj2GUNS6NKG8jb9fE9MRQZlJBPRU4H603nTNfRziGenXW0zzhz7",
   baseURL: COZE_CN_BASE_URL,
 });
 
 app.post('/api/coze/chat', async (req, res) => {
-  const { message, botId } = req.body;
+  const { bot_id, user_id, additional_messages } = req.body;
+  
   try {
     const stream = await cozeClient.chat.stream({
-      bot_id: botId,
-      additional_messages: [
-        {
-          role: 'user',
-          content: message,
-          content_type: 'text',
-        },
-      ],
+      bot_id: bot_id,
+      user_id: user_id,
+      additional_messages: additional_messages
     });
+
+    // 设置响应头，支持流式传输
+    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+    res.setHeader('Transfer-Encoding', 'chunked');
 
     let fullResponse = '';
 
