@@ -35,7 +35,7 @@
                   :type="chat.id === chatId ? 'success' : 'default'"
                   class="chat-btn"
                 >
-                  {{ chat.name }}
+                  <div class="chat-summary">{{ getChatSummary(chat) }}</div>
                 </el-button>
               </template>
   
@@ -65,7 +65,9 @@
   import { useUIStore } from "../stores/uiStore"; 
   import { computed } from "vue";
   import { useChatStore } from "../stores/chatStore";
+  import { useRouter } from "vue-router";
 
+  const router = useRouter();
   const chatStore = useChatStore();
   const uiStore = useUIStore();
   const drawerText = computed(() => (uiStore.isDrawerVisible ? "收起聊天记录" : "展开聊天记录"));
@@ -80,6 +82,20 @@
 const editingChatId = ref(null);
 const switchChat = (id) => {
   chatStore.switchChat(id);  // 调用 store 中的切换聊天函数
+  
+  // 获取当前路由路径
+  const currentPath = router.currentRoute.value.path;
+  
+  // 如果在首页，则使用 push 进行导航
+  if (currentPath === '/') {
+    router.push({
+      path: '/chat',
+      query: { chatId: id }
+    });
+  } else {
+    // 如果已经在聊天页面，则使用 replace 更新参数
+    router.replace({ query: { chatId: id } });
+  }
 };
 
 const renameChat = (id) => {
@@ -97,6 +113,25 @@ const deleteChat = (id) => {
 
 const createNewChat = () => {
   chatStore.createNewChat();  // 调用 store 中新建聊天的函数
+  router.replace({ query: { chatId: chatStore.chatId } }); // 更新 URL 为新创建的聊天
+};
+
+// 获取摘要（首条用户消息，超出5字用...，无消息显示"新会话"或"无内容"）
+const getChatSummary = (chat) => {
+  const storedChats = localStorage.getItem("chats");
+  if (storedChats) {
+    const chats = JSON.parse(storedChats);
+    const messages = chats[chat.id] || [];
+    const firstUserMsg = messages.find((msg) => msg.role === "user");
+    if (firstUserMsg && firstUserMsg.content) {
+      return firstUserMsg.content.length > 5
+        ? firstUserMsg.content.slice(0, 5) + "..."
+        : firstUserMsg.content;
+    }
+    // 没有用户消息但有其它消息
+    if (messages.length > 0) return "无内容";
+  }
+  return "新会话";
 };
 
   onMounted(() => {
@@ -131,6 +166,24 @@ const createNewChat = () => {
   justify-content: space-between; /* 让名称和菜单按钮分开 */
   width: 100%;
   padding: 10px 5px;
+}
+
+.chat-summary {
+  color: #333;
+  font-size: 15px;
+  text-align: left;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+.chat-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 120px;
+  max-width: 180px;
+  padding: 6px 12px;
 }
 </style>
   

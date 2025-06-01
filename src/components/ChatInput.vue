@@ -5,7 +5,7 @@
         :disabled="loading"
         type="textarea"
         :autosize="{ minRows: 2, maxRows: 5 }"
-        placeholder="输入你的问题..."
+        :placeholder="placeholder"
         class="input-area"
         @input="emitUpdateValue"
         @keydown.enter.prevent="emitSendQuestion"
@@ -28,6 +28,10 @@
   const props = defineProps({
     modelValue: String, // v-model 绑定的数据
     loading: Boolean, // 是否加载中
+    placeholder: {
+      type: String,
+      default: "输入你的问题..."  // 默认提示文本
+    }
   });
   const emit = defineEmits(["update:modelValue", "send"]);
   
@@ -55,7 +59,7 @@ const emitUpdateValue = () => {
   
   <style scoped>
   .chat-input {
-    width: 500px;
+    min-width: 500px;
     display: flex;
     flex-direction: column;
     gap: 10px;

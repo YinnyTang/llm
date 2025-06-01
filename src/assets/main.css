@@ -1,5 +1,23 @@
 @import './base.css';
 
+/* 隐藏滚动条样式 */
+/* Chrome, Safari and Opera */
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+  display: none;
+}
+
+/* Firefox */
+* {
+  scrollbar-width: none;
+}
+
+/* IE and Edge */
+* {
+  -ms-overflow-style: none;
+}
+
 #app {
   max-width: 1280px;
   margin: 0 auto;

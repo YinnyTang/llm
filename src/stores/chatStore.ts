@@ -1,12 +1,30 @@
 import { defineStore } from "pinia";
 import { ref, nextTick, watch, onMounted } from "vue";
 
-const BOT_ID = "7465630144141950985";
+const BOT_ID = "7510883133068541978";
+
+// 定义消息类型
+interface ChatMessage {
+  role: string;
+  content: string;
+  loading?: boolean;
+}
+
+// 防抖工具函数
+function debounce<T extends (...args: any[]) => void>(fn: T, delay = 500) {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  return function(this: any, ...args: Parameters<T>) {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      fn.apply(this, args);
+    }, delay);
+  } as T;
+}
 
 export const useChatStore = defineStore("chat", () => {
-  
+
   const chatId = ref<string | null>(null); // 当前聊天 ID
-  const messages = ref<{ role: string; content: string }[]>([]);
+  const messages = ref<ChatMessage[]>([]);
   const chatList = ref<{ id: string; name: string }[]>([]); // 聊天列表
   const question = ref("");
   const loading = ref(false);
@@ -17,13 +35,17 @@ export const useChatStore = defineStore("chat", () => {
 
   const chatWindow = ref<HTMLElement | null>(null);
 
-  const scrollToBottom = () => {
+  // 原始的滚动函数
+  const scrollToBottomOriginal = () => {
     nextTick(() => {
       if (chatWindow.value) {
         chatWindow.value.scrollTop = chatWindow.value.scrollHeight;
       }
     });
   };
+
+  // 防抖后的滚动函数
+  const scrollToBottom = debounce(scrollToBottomOriginal, 100); // 滚动使用较短的延迟
 
   // **编辑聊天名称**
   const renameChat = (id: string) => {
@@ -89,24 +111,42 @@ export const useChatStore = defineStore("chat", () => {
 
   // **切换聊天，加载历史记录**
   const switchChat = (id: string) => {
+    if (!id) return;
+    
     chatId.value = id;
     const storedChats = localStorage.getItem("chats");
     if (storedChats) {
       const chats = JSON.parse(storedChats);
       messages.value = chats[id] || [];
+    } else {
+      messages.value = [];
     }
+    
+    // 确保该聊天在列表中存在
+    const chatExists = chatList.value.some(chat => chat.id === id);
+    if (!chatExists) {
+      chatList.value.push({
+        id,
+        name: `对话 ${id.replace("chat-", "")}`,
+      });
+      saveChatsToStorage();
+    }
+    
     scrollToBottom();
   };
 
-  // **保存聊天记录到 localStorage**
-  const saveChatsToStorage = () => {
-    if (!chatId.value) return; // 避免在 `chatId` 为空时存储
+  // 原始的保存函数
+  const saveChatsToStorageOriginal = () => {
+    if (!chatId.value) return;
     const storedChats = localStorage.getItem("chats");
     const chats = storedChats ? JSON.parse(storedChats) : {};
     chats[chatId.value] = messages.value;
     localStorage.setItem("chats", JSON.stringify(chats));
     localStorage.setItem("chatList", JSON.stringify(chatList.value));
   };
+
+  // 防抖后的保存函数
+  const saveChatsToStorage = debounce(saveChatsToStorageOriginal, 500);
 
   // **新建聊天**
   const createNewChat = () => {
@@ -120,13 +160,13 @@ export const useChatStore = defineStore("chat", () => {
   };
 
   /** 发送用户输入 */
-const sendQuestion = async () => {
+  const sendQuestion = async () => {
     if (!question.value.trim()) return;
-  
+
     if (!chatId.value) {
       createNewChat();
     }
-  
+
     messages.value.push({ role: "user", content: question.value });
     scrollToBottom();
     loading.value = true;
@@ -145,12 +185,19 @@ const sendQuestion = async () => {
   // **发送消息**
   const sendMessageToCoze = async (message: string) => {
     try {
-      messages.value.push({ role: "user", content: message });
-
       const response = await fetch("/api/coze/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message, botId: BOT_ID }),
+        body: JSON.stringify({
+          bot_id: BOT_ID,
+          user_id: chatId.value || `user_${Date.now()}`,
+          additional_messages: [
+            {
+              role: "user",
+              content: message,
+            },
+          ],
+        }),
       });
 
       const reader = response.body?.getReader();
@@ -159,22 +206,34 @@ const sendQuestion = async () => {
       const decoder = new TextDecoder();
       let done = false;
       let result = "";
-      const aiMessage = { role: "ai", content: "" };
 
-      while (!done) {
-        const { value, done: doneReading } = await reader.read();
-        done = doneReading;
-        result += decoder.decode(value, { stream: true });
+      // 在添加新消息前，先移除 loading 消息
+      const loadingMsgIndex = messages.value.findIndex(msg => msg.loading);
+      if (loadingMsgIndex !== -1) {
+        // 不是删除loading消息，而是更新它
+        const loadingMsg = messages.value[loadingMsgIndex];
+        loadingMsg.loading = false;
+        loadingMsg.role = 'ai';
+        loadingMsg.content = '';
 
-        aiMessage.content = result;
+        while (!done) {
+          const { value, done: doneReading } = await reader.read();
+          done = doneReading;
+          const text = decoder.decode(value, { stream: true });
+          result += text;
+          loadingMsg.content = result;
+        }
       }
-      // 当流读取完成后，推送完整的 AI 消息到 messages 数组
-      messages.value.push(aiMessage);
 
       saveChatsToStorage(); // 保存聊天记录
       return result;
     } catch (error) {
       console.error("Error calling Coze API:", error);
+      // 发生错误时移除 loading 消息
+      const loadingMsgIndex = messages.value.findIndex(msg => msg.loading);
+      if (loadingMsgIndex !== -1) {
+        messages.value.splice(loadingMsgIndex, 1);
+      }
       return null;
     }
   };
